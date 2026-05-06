@@ -8,9 +8,10 @@
 #include "compute.h"
 
 // represents the objects in the system.  Global variables
-vector3 *hVel, *d_hVel;
-vector3 *hPos, *d_hPos;
-double *mass;
+vector3 *hVel, *dVel;
+vector3 *hPos, *dPos;
+vector3 *dAccel;
+double *hMass, *dMass;
 
 //initHostMemory: Create storage for numObjects entities in our system
 //Parameters: numObjects: number of objects to allocate
@@ -20,7 +21,7 @@ void initHostMemory(int numObjects)
 {
 	hVel = (vector3 *)malloc(sizeof(vector3) * numObjects);
 	hPos = (vector3 *)malloc(sizeof(vector3) * numObjects);
-	mass = (double *)malloc(sizeof(double) * numObjects);
+	hMass = (double *)malloc(sizeof(double) * numObjects);
 }
 
 //freeHostMemory: Free storage allocated by a previous call to initHostMemory
@@ -31,7 +32,7 @@ void freeHostMemory()
 {
 	free(hVel);
 	free(hPos);
-	free(mass);
+	free(hMass);
 }
 
 //planetFill: Fill the first NUMPLANETS+1 entries of the entity arrays with an estimation
@@ -47,7 +48,7 @@ void planetFill(){
 			hPos[i][j]=data[i][j];
 			hVel[i][j]=data[i][j+3];
 		}
-		mass[i]=data[i][6];
+		hMass[i]=data[i][6];
 	}
 }
 
@@ -58,14 +59,14 @@ void planetFill(){
 //Side Effects: Fills count entries in our system starting at index start (0 based)
 void randomFill(int start, int count)
 {
-	int i, j, c = start;
+	int i, j;
 	for (i = start; i < start + count; i++)
 	{
 		for (j = 0; j < 3; j++)
 		{
 			hVel[i][j] = (double)rand() / RAND_MAX * MAX_DISTANCE * 2 - MAX_DISTANCE;
 			hPos[i][j] = (double)rand() / RAND_MAX * MAX_VELOCITY * 2 - MAX_VELOCITY;
-			mass[i] = (double)rand() / RAND_MAX * MAX_MASS;
+			hMass[i] = (double)rand() / RAND_MAX * MAX_MASS;
 		}
 	}
 }
@@ -85,7 +86,7 @@ void printSystem(FILE* handle){
 		for (j=0;j<3;j++){
 			fprintf(handle,"%lf,",hVel[i][j]);
 		}
-		fprintf(handle,"),m=%lf\n",mass[i]);
+		fprintf(handle,"),m=%lf\n",hMass[i]);
 	}
 }
 
@@ -102,9 +103,28 @@ int main(int argc, char **argv)
 	#ifdef DEBUG
 	printSystem(stdout);
 	#endif
+
+	cudaMalloc(&dPos, sizeof(vector3) * NUMENTITIES);
+    cudaMalloc(&dVel, sizeof(vector3) * NUMENTITIES);
+    cudaMalloc(&dAccel, sizeof(vector3) * NUMENTITIES * NUMENTITIES);
+    cudaMalloc(&dMass, sizeof(double) * NUMENTITIES);
+
+	cudaMemcpy(dPos, hPos, sizeof(vector3) * NUMENTITIES, cudaMemcpyHostToDevice);
+    cudaMemcpy(dVel, hVel, sizeof(vector3) * NUMENTITIES, cudaMemcpyHostToDevice);
+	cudaMemcpy(dMass, hMass, sizeof(vector3) * NUMENTITIES, cudaMemcpyHostToDevice);
+
 	for (t_now=0;t_now<DURATION;t_now+=INTERVAL){
-		compute();
+		compute(dPos, dVel, dAccel, dMass);
 	}
+
+	cudaMemcpy(hPos, dPos, sizeof(vector3) * NUMENTITIES, cudaMemcpyDeviceToHost);
+	cudaMemcpy(hVel, dVel, sizeof(vector3) * NUMENTITIES, cudaMemcpyDeviceToHost);
+
+	cudaFree(dPos);
+	cudaFree(dVel);
+	cudaFree(dAccel);
+	cudaFree(dMass);
+
 	clock_t t1=clock()-t0;
 #ifdef DEBUG
 	printSystem(stdout);

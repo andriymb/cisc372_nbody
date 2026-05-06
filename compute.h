@@ -1,1 +1,1 @@
-void compute();
+void compute(vector3 *dPos, vector3 *dVel, vector3 *dAccel, double *dMass);
