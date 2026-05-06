@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <stdio.h>
 #include <math.h>
 #include "vector.h"
 #include "config.h"
@@ -11,6 +12,7 @@ __global__ void computeAccels(vector3 *dPos, vector3 *dAccel, double *dMass) {
 
     if (entityOne == entityTwo) {
         FILL_VECTOR(dAccel[entityOne * NUMENTITIES + entityTwo], 0, 0, 0);
+        return;
     }
 
     vector3 distance;

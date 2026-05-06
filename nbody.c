@@ -106,26 +106,9 @@ int main(int argc, char **argv)
 	fprintf(stdout, "\n");
 	#endif
 
-	cudaMalloc(&dPos, sizeof(vector3) * NUMENTITIES);
-    cudaMalloc(&dVel, sizeof(vector3) * NUMENTITIES);
-    cudaMalloc(&dAccel, sizeof(vector3) * NUMENTITIES * NUMENTITIES);
-    cudaMalloc(&dMass, sizeof(double) * NUMENTITIES);
-
-	cudaMemcpy(dPos, hPos, sizeof(vector3) * NUMENTITIES, cudaMemcpyHostToDevice);
-    cudaMemcpy(dVel, hVel, sizeof(vector3) * NUMENTITIES, cudaMemcpyHostToDevice);
-	cudaMemcpy(dMass, hMass, sizeof(double) * NUMENTITIES, cudaMemcpyHostToDevice);
-
 	for (t_now=0;t_now<DURATION;t_now+=INTERVAL){
-		compute(dPos, dVel, dAccel, dMass);
+		compute(NULL, NULL, NULL, NULL);
 	}
-
-	cudaMemcpy(hPos, dPos, sizeof(vector3) * NUMENTITIES, cudaMemcpyDeviceToHost);
-	cudaMemcpy(hVel, dVel, sizeof(vector3) * NUMENTITIES, cudaMemcpyDeviceToHost);
-
-	cudaFree(dPos);
-	cudaFree(dVel);
-	cudaFree(dAccel);
-	cudaFree(dMass);
 
 	clock_t t1=clock()-t0;
 #ifdef DEBUG
