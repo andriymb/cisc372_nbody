@@ -75,8 +75,6 @@ void compute(vector3 *dPos, vector3 *dVel, vector3 *dAccel, double *dMass) {
     computeAccels<<<numBlocks, blockSize>>>(dPos, dAccel, dMass);
     cudaDeviceSynchronize();
 
-    dim3 blockSize2(256);
-    dim3 numBlocks2((NUMENTITIES + blockSize2.x - 1) / blockSize2.x);
-    updateEntities<<<numBlocks2, blockSize2>>>(dPos, dVel, dAccel);
+    updateEntities<<<NUMENTITIES, 256>>>(dPos, dVel, dAccel);
     cudaDeviceSynchronize();
 }
