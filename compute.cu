@@ -10,6 +10,21 @@ __global__ void computeAccels(vector3 *dPos, vector3 *dAccel, double *dMass) {
     int entityTwo = blockIdx.y * blockDim.y + threadIdx.y;
     if (entityOne >= NUMENTITIES || entityTwo >= NUMENTITIES) return;
 
+    __shared__ vector3 sharedPos[256];
+    __shared__ double sharedMass[256];
+
+    int threadPos_1d = threadIdx.y * blockDim.x + threadIdx.x;
+    int elementPos_1d = threadPos_1d + ((blockIdx.y * gridDim.x + blockIdx.x) * blockDim.x * blockDim.y);
+    if (elementPos_1d >= NUMENTITIES) return;
+
+    sharedPos[threadPos_1d][0] = dPos[elementPos_1d][0];
+    sharedPos[threadPos_1d][1] = dPos[elementPos_1d][1];
+    sharedPos[threadPos_1d][2] = dPos[elementPos_1d][2];
+
+    sharedMass[threadPos_1d] = dMass[elementPos_1d];
+
+    __syncthreads();
+
     if (entityOne == entityTwo) {
         FILL_VECTOR(dAccel[entityOne * NUMENTITIES + entityTwo], 0, 0, 0);
         return;
@@ -17,11 +32,11 @@ __global__ void computeAccels(vector3 *dPos, vector3 *dAccel, double *dMass) {
 
     vector3 distance;
     int axis;
-    for (axis = 0; axis < 3; axis++) distance[axis] = dPos[entityOne][axis] - dPos[entityTwo][axis];
+    for (axis = 0; axis < 3; axis++) distance[axis] = sharedPos[entityOne][axis] - sharedPos[entityTwo][axis];
 
     double magnitudeSquared = distance[0] * distance[0] + distance[1] * distance[1] + distance[2] * distance[2];
 	double magnitude = sqrt(magnitudeSquared);
-	double accelMag = -1 * GRAV_CONSTANT * dMass[entityTwo] / magnitudeSquared;
+	double accelMag = -1 * GRAV_CONSTANT * sharedMass[entityTwo] / magnitudeSquared;
 
 	FILL_VECTOR(dAccel[entityOne * NUMENTITIES + entityTwo],
         accelMag * distance[0] / magnitude,
@@ -32,20 +47,39 @@ __global__ void computeAccels(vector3 *dPos, vector3 *dAccel, double *dMass) {
 
 __global__ void updateEntities(vector3 *dPos, vector3 *dVel, vector3 *dAccel) {
 
-    int entityOne = blockIdx.x * blockDim.x + threadIdx.x;
-    if (entityOne >= NUMENTITIES) return;
+    int entityOne = blockIdx.x;
 
-    vector3 accelSum = {0, 0, 0};
+    __shared__ vector3 partialSums[256];
+
+    vector3 localSum = {0, 0, 0};
 
     int entityTwo, axis;
-    for (entityTwo = 0; entityTwo < NUMENTITIES; entityTwo++) {
-        for (axis = 0; axis < 3; axis++)
-            accelSum[axis] += dAccel[entityOne * NUMENTITIES + entityTwo][axis];
+    for (entityTwo = threadIdx.x; entityTwo < NUMENTITIES; entityTwo += blockDim.x) {
+        for (axis = 0; axis < 3; axis++) {
+            localSum[axis] += dAccel[entityOne * NUMENTITIES + entityTwo][axis];
+        }
     }
 
     for (axis = 0; axis < 3; axis++) {
-        dVel[entityOne][axis] += accelSum[axis] * INTERVAL;
-        dPos[entityOne][axis] += dVel[entityOne][axis] * INTERVAL;
+        partialSums[threadIdx.x][axis] = localSum[axis];
+    }
+
+    __syncthreads();
+
+    int stride;
+     for (stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+        if (threadIdx.x < stride) {
+            for (axis = 0; axis < 3; axis++)
+                partialSums[threadIdx.x][axis] += partialSums[threadIdx.x + stride][axis];
+        }
+        __syncthreads();
+    }
+
+    if (threadIdx.x == 0) {
+        for (axis = 0; axis < 3; axis++) {
+            dVel[entityOne][axis] += partialSums[0][axis] * INTERVAL;
+            dPos[entityOne][axis] += dVel[entityOne][axis] * INTERVAL;
+        }
     }
 }
 
